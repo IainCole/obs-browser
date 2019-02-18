@@ -24,9 +24,16 @@
 #include <thread>
 #include <mutex>
 
+#ifdef USE_QT_LOOP
+#include <QApplication>
+#include <QEventLoop>
+#include <QThread>
+#endif
+
 using namespace std;
 
 extern bool QueueCEFTask(std::function<void()> task);
+extern bool cef_initialized;
 
 static mutex browser_list_mutex;
 static BrowserSource *first_browser = nullptr;
@@ -57,6 +64,22 @@ BrowserSource::~BrowserSource()
 void BrowserSource::ExecuteOnBrowser(std::function<void()> func, bool async)
 {
 	if (!async) {
+#ifdef USE_QT_LOOP
+		if (QThread::currentThread() == qApp->thread()) {
+			QEventLoop eventLoop;
+			bool success = QueueCEFTask([&] () {
+				if (!!cefBrowser)
+					func();
+				QMetaObject::invokeMethod(&eventLoop, "quit",
+						Qt::QueuedConnection);
+			});
+			if (success) {
+				eventLoop.exec();
+				CefDoMessageLoopWork();
+			}
+			return;
+		}
+#endif
 		os_event_t *finishedEvent;
 		os_event_init(&finishedEvent, OS_EVENT_TYPE_AUTO);
 		bool success = QueueCEFTask([&] () {

@@ -21,6 +21,21 @@
 #include <map>
 #include "cef-headers.hpp"
 
+#ifdef USE_QT_LOOP
+#include <functional>
+#include <QObject>
+
+typedef std::function<void()> MessageTask;
+
+class MessageObject : public QObject {
+	Q_OBJECT
+
+public slots:
+	void ExecuteTask(MessageTask task);
+	void DoCefMessageLoop(int ms);
+};
+#endif
+
 class BrowserApp : public CefApp,
                    public CefRenderProcessHandler,
                    public CefBrowserProcessHandler,
@@ -63,6 +78,10 @@ public:
 			const CefV8ValueList &arguments,
 			CefRefPtr<CefV8Value> &retval,
 			CefString &exception) override;
+
+#ifdef USE_QT_LOOP
+	virtual void OnScheduleMessagePumpWork(int64 delay_ms) override;
+#endif
 
 	IMPLEMENT_REFCOUNTING(BrowserApp);
 };

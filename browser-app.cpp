@@ -24,6 +24,12 @@
 #include <windows.h>
 #endif
 
+#ifdef USE_QT_LOOP
+#include <util/base.h>
+#include <util/platform.h>
+#include <QTimer>
+#endif
+
 using namespace json11;
 
 CefRefPtr<CefRenderProcessHandler> BrowserApp::GetRenderProcessHandler()
@@ -265,3 +271,30 @@ bool BrowserApp::Execute(const CefString &name,
 
 	return true;
 }
+
+#ifdef USE_QT_LOOP
+Q_DECLARE_METATYPE(MessageTask);
+MessageObject messageObject;
+
+void MessageObject::ExecuteTask(MessageTask task)
+{
+	task();
+}
+
+void MessageObject::DoCefMessageLoop(int ms)
+{
+	if (ms)
+		QTimer::singleShot((int)ms, [] () {CefDoMessageLoopWork();});
+	else
+		CefDoMessageLoopWork();
+}
+
+void BrowserApp::OnScheduleMessagePumpWork(int64 delay_ms)
+{
+	if (delay_ms < 0)
+		delay_ms = 0;
+	QMetaObject::invokeMethod(&messageObject, "DoCefMessageLoop",
+			Qt::QueuedConnection,
+			Q_ARG(int, (int)delay_ms));
+}
+#endif

@@ -23,6 +23,7 @@
 #include <util/dstr.hpp>
 #include <obs-module.h>
 #include <obs.hpp>
+#include <functional>
 #include <thread>
 #include <mutex>
 
@@ -42,6 +43,11 @@
 #include <d3d11.h>
 #endif
 
+#ifdef USE_QT_LOOP
+#include <QApplication>
+#include <QThread>
+#endif
+
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("obs-browser", "en-US")
 
@@ -49,6 +55,8 @@ using namespace std;
 using namespace json11;
 
 static thread manager_thread;
+static bool manager_initialized = false;
+bool cef_initialized = false;
 os_event_t *cef_started_event = nullptr;
 
 static int adapterCount = 0;
@@ -60,12 +68,28 @@ bool hwaccel = false;
 
 /* ========================================================================= */
 
+#ifdef USE_QT_LOOP
+extern MessageObject messageObject;
+#endif
+
 class BrowserTask : public CefTask {
 public:
 	std::function<void()> task;
 
 	inline BrowserTask(std::function<void()> task_) : task(task_) {}
-	virtual void Execute() override {task();}
+	virtual void Execute() override
+	{
+#ifdef USE_QT_LOOP
+		/* you have to put the tasks on the Qt event queue after this
+		 * call otherwise the CEF message pump may stop functioning
+		 * correctly, it's only supposed to take 10ms max */
+		QMetaObject::invokeMethod(&messageObject, "ExecuteTask",
+				Qt::QueuedConnection,
+				Q_ARG(MessageTask, task));
+#else
+		task();
+#endif
+	}
 
 	IMPLEMENT_REFCOUNTING(BrowserTask);
 };
@@ -182,7 +206,9 @@ static obs_properties_t *browser_source_get_properties(void *data)
 	return props;
 }
 
-static void BrowserManagerThread(void)
+static CefRefPtr<BrowserApp> app;
+
+static void BrowserInit(void)
 {
 	string path = obs_get_module_binary_path(obs_current_module());
 	path = path.substr(0, path.find_last_of('/') + 1);
@@ -197,9 +223,18 @@ static void BrowserManagerThread(void)
 #endif
 
 	CefSettings settings;
+#ifdef _DEBUG
+	settings.log_severity = LOGSEVERITY_DEBUG;
+#else
 	settings.log_severity = LOGSEVERITY_DISABLE;
+#endif
 	settings.windowless_rendering_enabled = true;
 	settings.no_sandbox = true;
+
+#ifdef USE_QT_LOOP
+	settings.external_message_pump = true;
+	settings.multi_threaded_message_loop = false;
+#endif
 
 #if defined(__APPLE__) && !defined(BROWSER_DEPLOY)
 	CefString(&settings.framework_dir_path) = CEF_LIBRARY;
@@ -233,21 +268,38 @@ static void BrowserManagerThread(void)
 	}
 #endif
 
-	CefRefPtr<BrowserApp> app(new BrowserApp(tex_sharing_avail));
+	app = new BrowserApp(tex_sharing_avail);
 	CefExecuteProcess(args, app, nullptr);
 	CefInitialize(args, settings, app, nullptr);
 	CefRegisterSchemeHandlerFactory("http", "absolute",
 			new BrowserSchemeHandlerFactory());
+	os_atomic_set_bool(&cef_initialized, true);
 	os_event_signal(cef_started_event);
-	CefRunMessageLoop();
-	CefShutdown();
 }
+
+static void BrowserShutdown(void)
+{
+	CefShutdown();
+	app = nullptr;
+}
+
+#ifndef USE_QT_LOOP
+static void BrowserManagerThread(void)
+{
+	BrowserInit();
+	CefRunMessageLoop();
+	BrowserShutdown();
+}
+#endif
 
 extern "C" EXPORT void obs_browser_initialize(void)
 {
-	static bool manager_initialized = false;
 	if (!os_atomic_set_bool(&manager_initialized, true)) {
+#ifdef USE_QT_LOOP
+		BrowserInit();
+#else
 		manager_thread = thread(BrowserManagerThread);
+#endif
 	}
 }
 
@@ -462,6 +514,10 @@ bool obs_module_load(void)
 	blog(LOG_INFO, "[obs-browser]: Version %s",
 			OBS_BROWSER_VERSION_STRING);
 
+#ifdef USE_QT_LOOP
+	qRegisterMetaType<MessageTask>("MessageTask");
+#endif
+
 	os_event_init(&cef_started_event, OS_EVENT_TYPE_MANUAL);
 
 	CefEnableHighDPISupport();
@@ -500,12 +556,16 @@ bool obs_module_load(void)
 
 void obs_module_unload(void)
 {
+#ifdef USE_QT_LOOP
+	BrowserShutdown();
+#else
 	if (manager_thread.joinable()) {
 		while (!QueueCEFTask([] () {CefQuitMessageLoop();}))
 			os_sleep_ms(5);
 
 		manager_thread.join();
 	}
+#endif
 
 	os_event_destroy(cef_started_event);
 }

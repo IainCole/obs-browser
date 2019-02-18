@@ -25,6 +25,10 @@ if(APPLE)
 	endif()
 endif()
 
+if(NOT WIN32)
+	set(BROWSER_PANEL_SUPPORT_ENABLED FALSE)
+endif()
+
 configure_file(
 	"${CMAKE_CURRENT_SOURCE_DIR}/browser-config.h.in"
 	"${CMAKE_CURRENT_BINARY_DIR}/browser-config.h")
@@ -34,6 +38,9 @@ include_directories("${CEF_ROOT_DIR}")
 
 # ----------------------------------------------------------------------------
 
+# TODO/XXX: Only non-windows!
+set(USE_QT_LOOP TRUE)
+
 set(obs-browser_LIBRARIES
 	libobs
 	obs-frontend-api
@@ -41,6 +48,24 @@ set(obs-browser_LIBRARIES
 
 list(APPEND obs-browser_LIBRARIES
 	${CEF_LIBRARIES})
+
+if(BROWSER_PANEL_SUPPORT_ENABLED OR USE_QT_LOOP)
+	if(DEFINED QTDIR${_lib_suffix})
+		list(APPEND CMAKE_PREFIX_PATH "${QTDIR${_lib_suffix}}")
+	elseif(DEFINED QTDIR)
+		list(APPEND CMAKE_PREFIX_PATH "${QTDIR}")
+	elseif(DEFINED ENV{QTDIR${_lib_suffix}})
+		list(APPEND CMAKE_PREFIX_PATH "$ENV{QTDIR${_lib_suffix}}")
+	elseif(DEFINED ENV{QTDIR})
+		list(APPEND CMAKE_PREFIX_PATH "$ENV{QTDIR}")
+	endif()
+
+	set(CMAKE_AUTOMOC TRUE)
+	find_package(Qt5Widgets REQUIRED)
+	list(APPEND obs-browser_LIBRARIES
+		Qt5::Widgets
+		)
+endif()
 
 if(MSVC)
 	string(REPLACE "/MD" "/MT"
@@ -92,19 +117,6 @@ set(obs-browser_HEADERS
 # only allow browser panels on win32 for now -- other operating systems
 # need more testing
 if(WIN32 AND BROWSER_PANEL_SUPPORT_ENABLED)
-	if(DEFINED QTDIR${_lib_suffix})
-		list(APPEND CMAKE_PREFIX_PATH "${QTDIR${_lib_suffix}}")
-	elseif(DEFINED QTDIR)
-		list(APPEND CMAKE_PREFIX_PATH "${QTDIR}")
-	elseif(DEFINED ENV{QTDIR${_lib_suffix}})
-		list(APPEND CMAKE_PREFIX_PATH "$ENV{QTDIR${_lib_suffix}}")
-	elseif(DEFINED ENV{QTDIR})
-		list(APPEND CMAKE_PREFIX_PATH "$ENV{QTDIR}")
-	endif()
-
-	set(CMAKE_AUTOMOC TRUE)
-	find_package(Qt5Widgets REQUIRED)
-
 	list(APPEND obs-browser_SOURCES
 		panel/browser-panel.cpp
 		panel/browser-panel-client.cpp
@@ -113,9 +125,6 @@ if(WIN32 AND BROWSER_PANEL_SUPPORT_ENABLED)
 		panel/browser-panel.hpp
 		panel/browser-panel-client.hpp
 		panel/browser-panel-internal.hpp
-		)
-	list(APPEND obs-browser_LIBRARIES
-		Qt5::Widgets
 		)
 endif()
 
@@ -127,6 +136,9 @@ add_library(obs-browser MODULE
 target_link_libraries(obs-browser
 	${obs-browser_LIBRARIES}
 	)
+if(USE_QT_LOOP)
+	target_compile_definitions(obs-browser PRIVATE USE_QT_LOOP)
+endif()
 
 # ----------------------------------------------------------------------------
 

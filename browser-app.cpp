@@ -281,12 +281,21 @@ void MessageObject::ExecuteTask(MessageTask task)
 	task();
 }
 
+static void CefDo()
+{
+	CefDoMessageLoopWork();
+	CefDoMessageLoopWork();
+	CefDoMessageLoopWork();
+	CefDoMessageLoopWork();
+	CefDoMessageLoopWork();
+}
+
 void MessageObject::DoCefMessageLoop(int ms)
 {
 	if (ms)
-		QTimer::singleShot((int)ms, [] () {CefDoMessageLoopWork();});
+		QTimer::singleShot((int)ms, [] () {CefDo();});
 	else
-		CefDoMessageLoopWork();
+		CefDo();
 }
 
 void BrowserApp::OnScheduleMessagePumpWork(int64 delay_ms)

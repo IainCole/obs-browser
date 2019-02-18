@@ -25,10 +25,6 @@ if(APPLE)
 	endif()
 endif()
 
-if(NOT WIN32)
-	set(BROWSER_PANEL_SUPPORT_ENABLED FALSE)
-endif()
-
 configure_file(
 	"${CMAKE_CURRENT_SOURCE_DIR}/browser-config.h.in"
 	"${CMAKE_CURRENT_BINARY_DIR}/browser-config.h")
@@ -116,7 +112,7 @@ set(obs-browser_HEADERS
 
 # only allow browser panels on win32 for now -- other operating systems
 # need more testing
-if(WIN32 AND BROWSER_PANEL_SUPPORT_ENABLED)
+if(BROWSER_PANEL_SUPPORT_ENABLED)
 	list(APPEND obs-browser_SOURCES
 		panel/browser-panel.cpp
 		panel/browser-panel-client.cpp

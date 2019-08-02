@@ -170,6 +170,11 @@ if (WIN32)
 	set_target_properties(obs-browser-page PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS")
 endif(WIN32)
 
+if (UNIX AND NOT APPLE)
+    set_target_properties(obs-browser PROPERTIES INSTALL_RPATH "$ORIGIN/")
+    set_target_properties(obs-browser-page PROPERTIES INSTALL_RPATH "$ORIGIN/")
+endif()
+
 if (APPLE AND XCODE)
 	set_xcode_property(obs-browser-page CLANG_CXX_LIBRARY "libc++")
 endif(APPLE AND XCODE)
@@ -207,6 +212,11 @@ if (WIN32)
 		"${CEF_ROOT_DIR}/Release/v8_context_snapshot.bin"
 		"${CMAKE_BINARY_DIR}/rundir/$<CONFIGURATION>/obs-plugins/${BITS}bit/"
 	)
+endif()
+
+if (UNIX AND NOT APPLE)
+	install(DIRECTORY "${CEF_ROOT_DIR}/Resources/" DESTINATION "${OBS_PLUGIN_DESTINATION}")
+	install(DIRECTORY "${CEF_ROOT_DIR}/Release/" DESTINATION "${OBS_PLUGIN_DESTINATION}")
 endif()
 
 if(APPLE AND NOT BROWSER_DEPLOY)

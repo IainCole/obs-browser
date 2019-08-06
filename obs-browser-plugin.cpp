@@ -222,7 +222,7 @@ static void BrowserInit(void)
 #endif
 
 	CefSettings settings;
-	settings.log_severity = LOGSEVERITY_DISABLE;
+	settings.log_severity = LOGSEVERITY_DEBUG;
 	settings.windowless_rendering_enabled = true;
 	settings.no_sandbox = true;
 
